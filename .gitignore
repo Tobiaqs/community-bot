@@ -1,0 +1,5 @@
+credentials.php
+*.bat
+log/
+*.log
+data/posted.txt
