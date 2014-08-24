@@ -8,7 +8,7 @@
 
 // This parses templates in tobiastemplate-format or something, whatever
 
-function tmplparse($file, $input) {
+function tmplparse($file, $input, $customReplacements = null) {
 
 	// Read out the template file
 	$tmpl = file_get_contents($file);
@@ -54,7 +54,12 @@ function tmplparse($file, $input) {
 				}
 				// Did we find a valid value? No need to search further.
 				if($w) {
-					$w = str_replace('{?size,height,width,quality}', '', $w);
+					if($customReplacements) {
+						foreach($customReplacements as $replacement)
+							$w = str_replace($replacement[0], $replacement[1], $w);
+					}
+					if(strpos($w, '//api.audioaddict.com') === 0)
+						$w = 'http:'.$w;
 					break;
 				}
 			}

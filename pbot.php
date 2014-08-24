@@ -26,8 +26,9 @@ date_default_timezone_set('UTC');
 $i = new VBInterface($vb_user, $vb_pass);
 
 // Optionally set a writable stream here. The interface class will write debug messages to it.
-$i->logStream = fopen('log/vbinterface.log', 'w');
+// $i->logStream = fopen('log/vbinterface.log', 'w');
 
+$postReplacements = array(array('{?size,height,width,quality}', ''));
 
 // We want our signature to be customized according to our geolocation.
 $geo = getgeo();
@@ -180,7 +181,7 @@ while(1) {
 			echo "Posting {$title}.. ";
 			$i->setThread(
 				$title,
-				tmplparse('data/post.tmpl', $item)); // Fill out virus's other mighty template with event data
+				tmplparse('data/post.tmpl', $item, $postReplacements)); // Fill out virus's other mighty template with event data
 
 			// Post!
 			$res = $i->run();
