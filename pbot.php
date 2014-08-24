@@ -26,7 +26,7 @@ date_default_timezone_set('UTC');
 $i = new VBInterface($vb_user, $vb_pass);
 
 // Optionally set a writable stream here. The interface class will write debug messages to it.
-// $i->logStream = fopen('log/vbinterface.log', 'w');
+$i->logStream = fopen('log/vbinterface.log', 'w');
 
 
 // We want our signature to be customized according to our geolocation.
@@ -42,11 +42,9 @@ if($geo) {
 	if($city == 'Eindhoven') {
 		$city = 'Best';
 	}
-	$sig .= "\nI'm currently located in {$city}, {$region}, {$country}";
+	$sig .= "\nI'm currently located in {$city}, {$region}, {$country} on server ".gethostname();
 }
 $i->setSignature($sig);
-
-echo $sig;
 
 // The queue
 $queue = array();

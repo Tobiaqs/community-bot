@@ -3,7 +3,7 @@
 /**
  * @author _Tobias
  * @license See disclosed LICENSE.txt
- * @version 0.5-beta
+ * @version 0.6-beta
  **/
 
 class VBInterface {
@@ -12,6 +12,9 @@ class VBInterface {
 
 	// Session headers
 	private $session = null;
+
+	// Security token
+	private $token = null;
 	
 	// Timestamp after which the session has expired
 	private $sessionExpire = 0;
@@ -96,17 +99,28 @@ class VBInterface {
 		}
  		elseif($time > $this->sessionExpire) {
 			$this->session = null;
-			$res = $this->post('http://forums.di.fm/login.php?do=login', $this->login, array($this->userAgent), true);
+			$res = $this->post('http://forums.di.fm/login.php?do=login', $this->login, null, array($this->userAgent), true);
 			$found = false;
 			if($res['headers']) {
 				foreach($res['headers'] as $header) {
-					$sr = 'Set-Cookie: vb_sessionhash=';
+					$sr = 'Set-Cookie: bb_sessionhash=';
 					if(strpos($header, $sr) === 0) {
 						$header = substr($header, strlen($sr));
-						$this->session = array($this->userAgent, 'Cookie: vb_sessionhash='.substr($header, 0, strpos($header, ';')));
+						$this->session = array($this->userAgent, 'Cookie: bb_sessionhash='.substr($header, 0, strpos($header, ';')));
 						$this->sessionExpire = time()+480;
 						$this->log("Session hash read from the headers. To expire on {$this->sessionExpire}.");
-						$found = true;
+
+						$res = $this->post('http://forums.di.fm/modcp/', null, null, $this->session);
+						preg_match('/var SECURITYTOKEN = "(.+?)"/', $res['result'], $matches);
+						$this->token = $matches[1];
+						if($this->token) {
+							$this->log("Security token read.");
+							$found = true;
+						}
+						else {
+							$this->log("Security token not found.");
+							return false;
+						}
 					}
 				}
 				if(!$found) {
@@ -150,7 +164,7 @@ class VBInterface {
 
 		$this->log("Starting thread posting request.");
 		$this->thread['signature'] = $this->showSignature;
-		$res = $this->post('http://forums.di.fm/newthread.php?do=postthread&f='.$this->forumID, $this->thread, $this->session);
+		$res = $this->post('http://forums.di.fm/newthread.php?do=postthread&f='.$this->forumID, $this->thread, $this->token, $this->session);
 		if(!$res['result']) {
 			$this->log($this->connFailed['message']);
 			return $this->connFailed;
@@ -221,7 +235,7 @@ class VBInterface {
 		// Set the thread's ID to the one we just received.
 		$this->createdThread = $matches[1]*1;
 		$this->poll['t'] = $matches[1];
-		$res = $this->post('http://forums.di.fm/poll.php?do=postpoll&t='.$matches[1], $this->poll, $this->session);
+		$res = $this->post('http://forums.di.fm/poll.php?do=postpoll&t='.$matches[1], $this->poll, $this->token, $this->session);
 		if(!$res['result']) {
 			$this->log($this->connFailed['message']);
 			return $this->connFailed;
@@ -266,7 +280,7 @@ class VBInterface {
 			$data['title'] = $title;
 		}
 
-		$res = $this->post('http://forums.di.fm/newreply.php?do=postreply&t='.$threadID, $data, $this->session);
+		$res = $this->post('http://forums.di.fm/newreply.php?do=postreply&t='.$threadID, $data, $this->token, $this->session);
 		if(!$res['result']) {
 			return $this->connFailed;
 		}
@@ -358,7 +372,7 @@ class VBInterface {
 		$res = $this->post('http://forums.di.fm/editpost.php', array(
 			'do' => 'deletepost',
 			'deletepost' => 'delete',
-			'postid' => $postID), $this->session, true);
+			'postid' => $postID), $this->token, $this->session, true);
 
 		return !!$res['result'];
 	}
@@ -372,7 +386,7 @@ class VBInterface {
 		$res = $this->post('http://forums.di.fm/profile.php', array(
 			'message' => $text,
 			'do' => 'updatesignature',
-			'url' => 'avatars/0-0.gif'), $this->session, true);
+			'url' => 'avatars/0-0.gif'), $this->token, $this->session, true);
 	}
 
 	// Get the BB code from a post by ID
@@ -384,7 +398,7 @@ class VBInterface {
 		$res = self::post('http://forums.di.fm/ajax.php', array(
 			'do' => 'quickedit',
 			'p' => $postID
-			), $this->session);
+			), $this->session, $this->token);
 		if($res['result']) {
 			if(strpos($res['result'], '<error>invalidid</error>') === false) {
 				preg_match('/<textarea .+?>(.+?)<\/textarea>/s', $res['result'], $matches);
@@ -410,20 +424,21 @@ class VBInterface {
 			'postid' => $postID,
 			'message' => $message,
 			'signature' => $this->showSignature,
-			), $this->session, true);
+			), $this->token, $this->session, true);
 		
 		return $res['headers'] !== null && $res['headers'][0] == 'HTTP/1.1 302 Found';
 	}
 
 	// Helper function for doing POST requests
-	public static function post($url, $post = null, $headers = null, $noData = false, $fiddler = false) {
+	public static function post($url, $post = null, $token = null, $headers = null, $noData = false, $fiddler = false) {
+		if($post && $token)
+			$post['securitytoken'] = $token;
 		$opts = array(
 			'method'  => 'POST',
 			'header'  => "Content-type: application/x-www-form-urlencoded\r\n".($headers ? implode("\r\n", $headers)."\r\n" : null),
 			'content' => $post ? http_build_query($post) : null,
 			'follow_location' => !$noData
 		);
-
 		if($fiddler) {
 			$opts['proxy'] = 'tcp://127.0.0.1:8888';
 			$opts['request_fulluri'] = true;

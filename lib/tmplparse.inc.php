@@ -54,6 +54,7 @@ function tmplparse($file, $input) {
 				}
 				// Did we find a valid value? No need to search further.
 				if($w) {
+					$w = str_replace('{?size,height,width,quality}', '', $w);
 					break;
 				}
 			}
